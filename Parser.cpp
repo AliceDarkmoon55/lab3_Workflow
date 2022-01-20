@@ -1,77 +1,127 @@
 #include "Parser.h"
+#include "Exceptions/wrong_command_order.h"
+#include "Exceptions/cant_get_next_line.h"
+#include "Exceptions/missed_end_of_command_block.h"
+#include "Exceptions/missed_start_of_command_block.h"
+#include "Exceptions/wrong_command_format.h"
+#include <iostream>
+#include <cstdlib>
+#include <cctype>
 
-bool Parser::is_integer(const std::string& s) {
-    if (s.empty() || ((!isdigit(s[0])) && (s[0] != '-') && (s[0] != '+'))) {
-        return false;
+
+Parser::Parser(const std::string & path){
+    input_file_.open(path);
+    if (!input_file_.is_open()){
+        throw std::runtime_error("Cant open file " + path + "!");
     }
-    char* p;
-    strtol(s.c_str(), &p, 10);
-    return (*p == 0);
 }
 
-Parser::Parser(std::ifstream* file) {
-    std::string s;
-    while (getline(*file, s)) {
-        std::istringstream iss(s);
-        std::string sub;
-        iss >> sub;
-        while (iss) {
-            args.push(sub);
-            iss >> sub;
+Parser::~Parser(){
+    input_file_.close();
+}
+
+
+
+void Parser::parse(){
+    std::string str;
+    while (getline(input_file_, str) && str != "desc");
+    if (str != "desc"){
+        throw error::missed_start_of_command_block("Missed 'desc'");
+    }
+    while (getline(input_file_, str) && str != "csed"){
+        size_t assigment_sign  = str.find('=');
+        if (assigment_sign == std::string::npos){
+            throw error::wrong_command_format("Wrong command format: '" + str + "'");
+        }
+        std::string cmd = str.substr(assigment_sign + 1);
+        trim(cmd);
+        if (cmd.empty()){
+            throw error::wrong_command_format("Empty command");
+        }
+        id_table_[atoi((str.substr(0, assigment_sign - 1)).c_str())] = command_parse(cmd);
+    }
+    if (str != "csed"){
+        throw error::missed_end_of_command_block("Missed 'csed' ");
+    }
+    if (!getline(input_file_, str)){
+        throw error::cant_get_next_line("Cant read next line");
+    }
+    size_t str_size = str.size();
+    std::string sub;
+    for (size_t i = 0; i < str_size; ++i){
+        if (str[i] == '-' || str[i] == '>') continue;
+        if (isdigit(str[i])){
+            sub += str[i];
+        }
+        else if (isspace(str[i])){
+            if (!sub.empty())
+                cmd_order.push_back(atoi(sub.c_str()));
+            sub = "";
+        }
+        else{
+            throw error::wrong_command_order("Wrong command order line format");
         }
     }
-    if (args.front() != BLOCK_START) {
-        throw WrongStructureException();
+    if (!sub.empty()){
+        cmd_order.push_back(atoi(sub.c_str()));
     }
-    args.pop();
-    end_of_desc_detected = false;
 }
 
-std::string Parser::get_next_essential_arg() {
-    std::string next;
-    while (true) {
-        if (args.empty() && !end_of_desc_detected) {
-            throw WrongStructureException();
+std::pair<std::string, std::vector<std::string> > Parser::command_parse(const std::string & str){
+    std::pair<std::string, std::vector<std::string> > cmd;
+    std::string res;
+    size_t str_size = str.size();
+    bool was_cmd = false;
+    for (size_t i = 0; i < str_size; ++i){
+        if (isspace(str[i])){
+            if (was_cmd){
+                cmd.second.push_back(res);
+            }
+            else{
+                cmd.first = (res);
+                was_cmd = true;
+            }
+            res = "";
         }
-        next = args.front();
-        if (next == BLOCK_END) {
-            throw WrongStructureException();
+        else{
+            res += str[i];
         }
-        if (next == BLOCK_INITIALIZER || next == NODE_BOND) {
-            args.pop();
-            continue;
+    }
+    if (!res.empty()){
+        if (was_cmd){
+            cmd.second.push_back(res);
         }
-        break;
+        else{
+            cmd.first = (res);
+        }
     }
-    args.pop();
-    return next;
+    return cmd;
 }
 
-unsigned int Parser::get_next_essential_int_arg() {
-    std::string arg = get_next_essential_arg();
-    if (!is_integer(arg)) {
-        throw WrongStructureException();
-    }
-    return static_cast<unsigned int>(std::stoi(arg));
+std::map<unsigned int, std::pair<std::string, std::vector<std::string> > > Parser::get_id_table() const{
+    return id_table_;
 }
 
-std::string Parser::get_command_args() {
-    std::string command_args;
-    while (!args.empty() && !is_integer(args.front()) && args.front() != BLOCK_END) {
-        command_args += args.front() + " ";
-        args.pop();
-    }
-    if (args.front() == BLOCK_END) {
-        end_of_desc_detected = true;
-        args.pop();
-    }
-    return command_args;
+std::vector<unsigned int> Parser::get_commands_order() const{
+    return cmd_order;
 }
 
-bool Parser::empty() {
-    return args.empty();
-}
-
-bool Parser::end_of_desc() {
-    return end_of_desc_detected;
+void Parser::trim(std::string &str) const {
+    size_t first_no_space = 0;
+    size_t last_no_space = str.size() - 1;
+    while (first_no_space < str.size() && isspace(str[first_no_space])){
+        first_no_space++;
+    }
+    while (last_no_space >= 0 && isspace(str[last_no_space])){
+        last_no_space--;
+    }
+    if (last_no_space <= first_no_space){
+        str = "";
+    }
+    else if (first_no_space != 0) {
+        str.erase(0, first_no_space);
+    }
+    else if (last_no_space != str.size() - 1) {
+        str.erase(last_no_space + 1, str.size() - last_no_space);
+    }
 }
