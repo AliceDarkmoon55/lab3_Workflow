@@ -1,6 +1,6 @@
 #pragma once
-#ifndef WORKFLOW_WORKFLOW_H
-#define WORKFLOW_WORKFLOW_H
+#ifndef WORKFLOW_CANT_GET_NEXT_LINE_H
+#define WORKFLOW_CANT_GET_NEXT_LINE_H
 
 #include <exception>
 #include <string>
@@ -17,4 +17,4 @@ namespace error {
     };
 }
 
-#endif //WORKFLOW_WORKFLOW_H
+#endif //WORKFLOW_CANT_GET_NEXT_LINE_H
