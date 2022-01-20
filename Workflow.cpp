@@ -1,72 +1,34 @@
 #include "Workflow.h"
+#include "Exceptions/first_command_is_not_input.h"
+#include "Exceptions/last_command_is_not_output.h"
+#include "Exceptions/middle_command_is_not_processing.h"
 
-Workflow::Workflow() {
-    text = SharedPtr<TextEditor>(new TextEditor);
-    auto readfile = SharedPtr<Command>(new Read(text));
-    auto writefile = SharedPtr<Command>(new Write(text));
-    auto grep = SharedPtr<Command>(new Grep(text));
-    auto sort = SharedPtr<Command>(new Sort(text));
-    auto replace = SharedPtr<Command>(new Replace(text));
-    auto dump = SharedPtr<Command>(new Dump(text));
-    commands["readfile"] = readfile;
-    commands["writefile"] = writefile;
-    commands["grep"] = grep;
-    commands["sort"] = sort;
-    commands["replace"] = replace;
-    commands["dump"] = dump;
-}
+#include <utility>
 
-void Workflow::parse_config(std::ifstream& input) {
-    Parser parser(&input);
-    while (!parser.end_of_desc()) {
-        auto id = parser.get_next_essential_int_arg();
 
-        auto command_name = parser.get_next_essential_arg();
-        auto command = commands[command_name];
-        if (command == nullptr) {
-            throw NoCommandException(command_name);
+Workflow::Workflow(std::string path) : path_(std::move(path))
+{}
+
+void Workflow::execute() {
+    Parser par(path_);
+    par.parse();
+    std::map<unsigned int, std::pair<std::string, std::vector<std::string> > > table = par.get_id_table();
+    std::vector<unsigned int> cmd_order = par.get_commands_order();
+    BlockFactory bf = BlockFactory::instance();
+    size_t cmd_amount = cmd_order.size();
+    std::vector<std::string> data;
+    for (size_t i = 0; i < cmd_amount; ++i){
+        ICommand * cmd = bf.create(table[cmd_order[i]].first, table[cmd_order[i]].second);
+        if (i == 0 && cmd->get_command_type() != COMMAND_TYPE::INPUT){
+            throw error::first_command_is_not_input("First command must be INPUT type");
         }
-
-        blocks[id] = command_name;
-        auto command_args = parser.get_command_args();
-        command->read_args(command_args);
-    }
-    while (!parser.empty()) {
-        queue.push(parser.get_next_essential_int_arg());
-    }
-}
-
-void Workflow::work(std::string file_name) {
-    try {
-        std::ifstream input(file_name);
-        if (!input.is_open()) {
-            throw NoFileException(file_name);
+        else if (i == cmd_amount - 1 && cmd->get_command_type() != COMMAND_TYPE::OUTPUT){
+            throw error::last_command_is_not_output("Last command must be OUTPUT type");
         }
-        parse_config(input);
-        input.close();
-        if (blocks[queue.front()] != "readfile" || blocks[queue.back()] != "writefile") {
-            throw WrongStructureException();
+        else if (i > 0 && i < (cmd_amount - 1) && cmd->get_command_type() != COMMAND_TYPE::PROCESSING){
+            throw error::middle_command_is_not_processing("Middle command must be PROCESSING type");
         }
-
-        while (!queue.empty()) {
-            SharedPtr<Command> next_command = commands[blocks[queue.front()]];
-            queue.pop();
-            next_command->execute();
-        }
-    }
-    catch (NoCommandException& e) {
-        e.get_message();
-    }
-    catch (NoFileException& e) {
-        e.get_message();
-    }
-    catch (WrongStructureException& e) {
-        e.get_message();
-    }
-    catch (NoParameterException& e) {
-        e.get_message();
-    }
-    catch (Exception& e) {
-        e.get_message();
+        data = cmd->execute(data);
+        delete cmd;
     }
 }
