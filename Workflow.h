@@ -1,22 +1,21 @@
 #pragma once
 #ifndef WORKFLOW_WORKFLOW_H
 #define WORKFLOW_WORKFLOW_H
-
-
+#include <string>
+#include <vector>
 #include <map>
-#include "Command.h"
+#include "Commands/ICommand.h"
 #include "Parser.h"
+#include "BlockFactory.h"
+
 
 class Workflow {
-private:
-    SharedPtr<TextEditor> text;
-    std::map<std::string, SharedPtr<Command>> commands;
-    std::map<unsigned int, std::string> blocks;
-    std::queue<unsigned int> queue;
 public:
-    Workflow();
-    void parse_config(std::ifstream&);
-    void work(std::string);
+    explicit Workflow(std::string  path);
+
+    void execute();
+private:
+    std::string path_;
 };
 
 
